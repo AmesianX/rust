@@ -57,7 +57,7 @@ rustc_queries! {
 
         /// Records the type of every item.
         query type_of(key: DefId) -> Ty<'tcx> {
-            storage(caches::LocalDenseDefIdCache<Ty<'tcx>>)
+            storage(caches::LocalDenseDefIdCacheSelector<Ty<'tcx>>)
             cache_on_disk_if { key.is_local() }
         }
 

@@ -10,6 +10,7 @@ use rustc_index::vec::IndexVec;
 use std::cell::RefCell;
 use std::default::Default;
 use std::hash::Hash;
+use std::marker::PhantomData;
 
 pub(crate) trait CacheSelector<K, V> {
     type Cache: QueryCache<K, V>;
@@ -57,13 +58,18 @@ pub(crate) trait QueryCache<K, V>: Default {
 pub struct DefaultCacheSelector;
 
 impl<K: Eq + Hash, V: Clone> CacheSelector<K, V> for DefaultCacheSelector {
-    type Cache = DefaultCache;
+    type Cache = DefaultCache<()>;
 }
 
-#[derive(Default)]
-pub struct DefaultCache;
+pub struct DefaultCache<D>(PhantomData<D>);
 
-impl<K: Eq + Hash, V: Clone> QueryCache<K, V> for DefaultCache {
+impl<D> Default for DefaultCache<D> {
+    fn default() -> Self {
+        DefaultCache(PhantomData)
+    }
+}
+
+impl<D, K: Eq + Hash, V: Clone> QueryCache<K, V> for DefaultCache<D> {
     type Sharded = FxHashMap<K, (V, DepNodeIndex)>;
 
     #[inline(always)]
@@ -114,9 +120,14 @@ impl<K: Eq + Hash, V: Clone> QueryCache<K, V> for DefaultCache {
     }
 }
 
+#[cfg(parallel_compiler)]
+pub type LocalDenseDefIdCacheSelector<V> = DefaultCache<V>;
+#[cfg(not(parallel_compiler))]
+pub type LocalDenseDefIdCacheSelector<V> = LocalDenseDefIdCache<V>;
+
 pub struct LocalDenseDefIdCache<V> {
     local: RefCell<IndexVec<DefIndex, Option<(V, DepNodeIndex)>>>,
-    other: DefaultCache,
+    other: DefaultCache<()>,
 }
 
 impl<V> Default for LocalDenseDefIdCache<V> {
@@ -126,7 +137,7 @@ impl<V> Default for LocalDenseDefIdCache<V> {
 }
 
 impl<V: Clone> QueryCache<DefId, V> for LocalDenseDefIdCache<V> {
-    type Sharded = <DefaultCache as QueryCache<DefId, V>>::Sharded;
+    type Sharded = <DefaultCache<()> as QueryCache<DefId, V>>::Sharded;
 
     #[inline(always)]
     fn lookup<'tcx, R, GetCache, OnHit, OnMiss, Q>(
